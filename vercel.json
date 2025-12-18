@@ -1,0 +1,17 @@
+{
+    "version": 2,
+    "rewrites": [
+        {
+            "source": "/api/cause-list",
+            "destination": "/api/cause-list"
+        },
+        {
+            "source": "/",
+            "destination": "/public/index.html"
+        },
+        {
+            "source": "/(.*)",
+            "destination": "/public/$1"
+        }
+    ]
+}
