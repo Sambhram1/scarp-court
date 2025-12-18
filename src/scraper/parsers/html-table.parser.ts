@@ -53,7 +53,7 @@ export class HtmlTableParser {
     }
 
     private static extractParties(
-        tds: cheerio.Cheerio<cheerio.Element>,
+        tds: cheerio.Cheerio<any>,
         $: cheerio.CheerioAPI
     ): { petitioner: string; respondent: string } {
         let petitioner = 'Unknown';
@@ -80,7 +80,7 @@ export class HtmlTableParser {
     }
 
     private static extractJudge(
-        tds: cheerio.Cheerio<cheerio.Element>,
+        tds: cheerio.Cheerio<any>,
         $: cheerio.CheerioAPI
     ): string {
         // Look for cells containing "Justice" or "Hon'ble"
@@ -94,7 +94,7 @@ export class HtmlTableParser {
     }
 
     private static extractCourtHall(
-        tds: cheerio.Cheerio<cheerio.Element>,
+        tds: cheerio.Cheerio<any>,
         $: cheerio.CheerioAPI
     ): string {
         // Look for cells containing "Hall" or numeric court identifiers
