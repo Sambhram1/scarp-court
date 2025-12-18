@@ -58,12 +58,18 @@ export class ScraperService {
 
     private async downloadJson(url: string): Promise<any | null> {
         try {
+            console.log(`[FETCH] Requesting: ${url}`);
+            const startTime = Date.now();
+
             const response = await fetch(url, {
                 method: 'GET',
                 headers: {
                     'User-Agent': 'Mozilla/5.0'
                 }
             });
+
+            const fetchTime = Date.now() - startTime;
+            console.log(`[FETCH] Response received in ${fetchTime}ms, status: ${response.status}`);
 
             if (response.status === 404) {
                 logger.warn(`API not found (404): ${url}`);
@@ -76,8 +82,11 @@ export class ScraperService {
             }
 
             const json = await response.json();
+            const jsonKeys = json && typeof json === 'object' ? Object.keys(json).length : 0;
+            console.log(`[FETCH] JSON parsed, ${jsonKeys} top-level keys`);
             return json;
         } catch (error: any) {
+            console.error(`[FETCH ERROR] ${error.message}`);
             logger.error(`Download error: ${error.message}`);
             throw error;
         }

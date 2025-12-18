@@ -49,7 +49,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         console.log(`Cache miss for ${dateStr}:${courtRoom}, scraping...`);
 
         // Scrape data
+        console.log('[DEBUG] About to call scraper.scrapeDailyCauseList');
+        const startTime = Date.now();
         const data = await scraper.scrapeDailyCauseList(dateStr, courtRoom);
+        const elapsed = Date.now() - startTime;
+        console.log(`[DEBUG] Scraper returned ${data.length} entries in ${elapsed}ms`);
+
+        if (data.length === 0) {
+            console.warn(`[WARNING] Scraper returned 0 entries for ${dateStr}:${courtRoom}`);
+        }
 
         // Cache for 24 hours
         await redis.set(cacheKey, data, 86400);
