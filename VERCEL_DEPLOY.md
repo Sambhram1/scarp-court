@@ -21,7 +21,7 @@ LOG_LEVEL=info
 - **Hobby plan**: 10 seconds max
 - **Pro plan**: 60 seconds max
 
-Our scraper typically takes 4-6 seconds, so it should work on both plans.
+Our scraper uses standard HTTP requests (no browser/Playwright required), so it runs fast and fits within Vercel's limits.
 
 ### Redis Cache
 The mocked Redis service works fine for serverless. For production caching, consider:

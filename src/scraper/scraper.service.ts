@@ -1,26 +1,11 @@
-import { chromium, Browser } from 'playwright';
+import * as https from 'https';
 import logger from '../utils/logger';
 import { CauseListEntry } from '../types';
 
 export class ScraperService {
-    private browser: Browser | null = null;
 
-    async init() {
-        if (this.browser) {
-            logger.info('Launching Playwright browser...');
-            this.browser = await chromium.launch({
-                headless: true,
-                args: ['--no-sandbox', '--disable-setuid-sandbox'],
-            });
-        }
-    }
 
-    async close() {
-        if (this.browser) {
-            await this.browser.close();
-            this.browser = null;
-        }
-    }
+
 
     async scrapeDailyCauseList(dateStr: string, courtRoom: string = 'COURT NO. 01'): Promise<CauseListEntry[]> {
         const entries: CauseListEntry[] = [];
@@ -57,39 +42,51 @@ export class ScraperService {
     }
 
     private async downloadJson(url: string): Promise<any | null> {
-        try {
-            console.log(`[FETCH] Requesting: ${url}`);
+        return new Promise((resolve, reject) => {
+            logger.info(`[FETCH] Requesting: ${url}`);
             const startTime = Date.now();
 
-            const response = await fetch(url, {
-                method: 'GET',
-                headers: {
-                    'User-Agent': 'Mozilla/5.0'
+            const options = {
+                headers: { 'User-Agent': 'Mozilla/5.0' },
+                rejectUnauthorized: false
+            };
+
+            const req = https.get(url, options, (res) => {
+                let data = '';
+
+                if (res.statusCode === 404) {
+                    logger.warn(`API not found (404): ${url}`);
+                    resolve(null);
+                    return;
                 }
+
+                if (res.statusCode && (res.statusCode < 200 || res.statusCode >= 300)) {
+                    logger.error(`HTTP ${res.statusCode} when downloading JSON`);
+                    reject(new Error(`HTTP ${res.statusCode}`));
+                    return;
+                }
+
+                res.on('data', (chunk) => data += chunk);
+
+                res.on('end', () => {
+                    const fetchTime = Date.now() - startTime;
+                    logger.info(`[FETCH] Response received in ${fetchTime}ms, status: ${res.statusCode}`);
+
+                    try {
+                        const json = JSON.parse(data);
+                        resolve(json);
+                    } catch (e: any) {
+                        logger.error(`Failed to parse JSON: ${e.message}`);
+                        reject(e);
+                    }
+                });
             });
 
-            const fetchTime = Date.now() - startTime;
-            console.log(`[FETCH] Response received in ${fetchTime}ms, status: ${response.status}`);
-
-            if (response.status === 404) {
-                logger.warn(`API not found (404): ${url}`);
-                return null;
-            }
-
-            if (!response.ok) {
-                logger.error(`HTTP ${response.status} when downloading JSON`);
-                throw new Error(`HTTP ${response.status}`);
-            }
-
-            const json = await response.json();
-            const jsonKeys = json && typeof json === 'object' ? Object.keys(json).length : 0;
-            console.log(`[FETCH] JSON parsed, ${jsonKeys} top-level keys`);
-            return json;
-        } catch (error: any) {
-            console.error(`[FETCH ERROR] ${error.message}`);
-            logger.error(`Download error: ${error.message}`);
-            throw error;
-        }
+            req.on('error', (e) => {
+                logger.error(`Download error: ${e.message}`);
+                reject(e);
+            });
+        });
     }
 
     private parseJsonData(jsonData: any, date: string, courtFilter: string): CauseListEntry[] {
@@ -97,7 +94,14 @@ export class ScraperService {
 
         const dataArray = Array.isArray(jsonData) ? jsonData : Object.values(jsonData);
 
-        const filteredData = dataArray.filter((item: any) => item.courtno === courtFilter);
+        // Relaxed filtering to match suffix (e.g. 'COURT NO. 01' matches 'COURT NO. 01 a')
+        const filteredData = dataArray.filter((item: any) =>
+            item.courtno === courtFilter || item.courtno.startsWith(courtFilter + ' ') || item.courtno.startsWith(courtFilter)
+        );
+
+        if (filteredData.length === 0 && dataArray.length > 0) {
+            const availableCourts = [...new Set(dataArray.map((i: any) => i.courtno))];
+        }
 
         logger.info(`Filtered ${filteredData.length} entries for ${courtFilter}`);
 
