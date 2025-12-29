@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { ScraperService } from '../src/scraper/scraper.service.refactored';
+import { ScraperService } from '../src/scraper/scraper.service';
 import { RedisService } from '../src/services/redis.service';
 import { CauseListEntry } from '../src/types';
 

@@ -12,11 +12,16 @@ app.use(express.json());
 app.use(morgan('combined', { stream: { write: (message) => logger.http(message.trim()) } }));
 
 // Serve static files from public directory
-app.use(express.static(path.join(__dirname, '../public')));
+app.use(express.static(path.join(__dirname, '../dist')));
 
-// Routes
-app.get('/api/cause-list', (req, res) => controller.getCauseList(req, res));
-app.get('/api/cause-list/today', (req, res) => controller.getTodayCauseList(req, res));
+// API Routes
+app.use('/api', controller.getCauseList.bind(controller)); // Changed to use 'controller' as defined
+
+// Handle React routing, return all requests to React app
+app.get('*', (req, res) => {
+    res.sendFile(path.join(__dirname, '../dist/index.html'));
+});
+
 app.get('/health', (req, res) => controller.getHealth(req, res));
 
 // Error handling
