@@ -12,6 +12,7 @@ interface Case {
 }
 
 const COURT_OPTIONS = [
+    "ALL COURTS",
     "COURT NO. 01", "COURT NO. 02", "COURT NO. 03 a", "COURT NO. 03 b", "COURT NO. 04",
     "COURT NO. 05", "COURT NO. 06 a", "COURT NO. 06 b", "COURT NO. 07 a", "COURT NO. 07 b",
     "COURT NO. 09", "COURT NO. 10", "COURT NO. 11 a", "COURT NO. 11 b", "COURT NO. 12",
@@ -24,6 +25,7 @@ const COURT_OPTIONS = [
 ];
 
 function App() {
+    const [courtId, setCourtId] = useState('madras');
     const [courtroom, setCourtroom] = useState(COURT_OPTIONS[0]);
     const [date, setDate] = useState(() => new Date().toISOString().split('T')[0]);
     const [results, setResults] = useState<Case[]>([]);
@@ -38,9 +40,23 @@ function App() {
         setHasSearched(true);
         setResults([]);
 
+        const url = `/api/cause-list?date=${date}&court=${encodeURIComponent(courtroom)}&courtId=${courtId}&_t=${Date.now()}`;
+        console.log(`[Frontend] Fetching: ${url}`);
+
         try {
-            const response = await fetch(`/api/cause-list?date=${date}&court=${encodeURIComponent(courtroom)}`);
+            // Include courtId in the request
+            // For Delhi, we pass courtId=delhi. The 'court' param (courtroom) is less relevant but we keep it for API compatibility or logging.
+            const response = await fetch(url);
+            console.log(`[Frontend] Response Status: ${response.status}`);
+
+            if (!response.ok) {
+                const text = await response.text();
+                console.error(`[Frontend] Error Response: ${text}`);
+                throw new Error(`Server returned ${response.status}: ${text}`);
+            }
+
             const data = await response.json();
+            console.log(`[Frontend] Data received:`, data);
 
             if (data.data && data.data.length > 0) {
                 setResults(data.data);
@@ -48,6 +64,7 @@ function App() {
                 setResults([]);
             }
         } catch (err: any) {
+            console.error(`[Frontend] Fetch Error:`, err);
             setError(`Error: ${err.message}`);
         } finally {
             setLoading(false);
@@ -57,7 +74,7 @@ function App() {
     return (
         <div className="container">
             <div className="header">
-                <h1>🏛️ Madras High Court</h1>
+                <h1>🏛️ {courtId === 'delhi' ? 'Delhi' : (courtId === 'calcutta' ? 'Calcutta' : (courtId === 'mumbai' ? 'Mumbai' : 'Madras'))} High Court</h1>
                 <p>Daily Cause List</p>
             </div>
 
@@ -65,20 +82,46 @@ function App() {
                 <form onSubmit={handleSearch}>
                     <div className="form-grid">
                         <div className="form-group">
-                            <label htmlFor="courtroom">Courtroom</label>
+                            <label htmlFor="court-select">High Court</label>
                             <select
-                                id="courtroom"
-                                required
-                                value={courtroom}
-                                onChange={(e) => setCourtroom(e.target.value)}
+                                id="court-select"
+                                value={courtId}
+                                onChange={(e) => {
+                                    setCourtId(e.target.value);
+                                    // Reset courtroom if switching to Delhi, Calcutta, or Mumbai
+                                    if (['delhi', 'calcutta', 'mumbai'].includes(e.target.value)) {
+                                        setCourtroom('ALL COURTS');
+                                    } else {
+                                        setCourtroom(COURT_OPTIONS[0]);
+                                    }
+                                }}
                             >
-                                {COURT_OPTIONS.map((court) => (
-                                    <option key={court} value={court}>
-                                        {court} // Display formatting could be improved, but keeping simple for now
-                                    </option>
-                                ))}
+                                <option value="madras">Madras High Court</option>
+                                <option value="delhi">Delhi High Court</option>
+                                <option value="calcutta">Calcutta High Court</option>
+                                <option value="mumbai">Mumbai High Court</option>
                             </select>
                         </div>
+
+                        {courtId === 'madras' && (
+                            <div className="form-group">
+                                <label htmlFor="courtroom">Courtroom</label>
+                                <select
+                                    id="courtroom"
+                                    required
+                                    value={courtroom}
+                                    onChange={(e) => setCourtroom(e.target.value)}
+                                >
+                                    {COURT_OPTIONS.map((court) => (
+                                        <option key={court} value={court}>
+                                            {court}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                        )}
+
+                        {/* Calcutta specific dropdown removed to match Delhi style (Unified List) */}
 
                         <div className="form-group">
                             <label htmlFor="date">Date</label>

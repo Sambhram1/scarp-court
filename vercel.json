@@ -2,8 +2,12 @@
     "version": 2,
     "rewrites": [
         {
-            "source": "/api/(.*)",
-            "destination": "/api/$1"
+            "source": "/api/debug",
+            "destination": "/api/debug"
+        },
+        {
+            "source": "/api/cause-list",
+            "destination": "/api/cause-list"
         },
         {
             "source": "/(.*)",

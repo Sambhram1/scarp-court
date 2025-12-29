@@ -46,6 +46,14 @@ First request after idle may be slower (~2-3s extra). Subsequent requests are fa
 ### HTTPS/SSL errors
 Already handled with `rejectUnauthorized: false` in the scraper.
 
+## Debugging
+
+If you see "No cases found" on Vercel:
+1.  Visit: `https://your-app.vercel.app/api/debug`
+2.  It will return the connection status to the Madras High Court API.
+3.  If `statusCode` is 403 or connection fails, Vercel's IP is blocked.
+4.  If `statusCode` is 200, check the `bodySnippet` to see if it's valid XML/JSON or an error page.
+
 ## Testing Deployment
 
 ```bash

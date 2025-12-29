@@ -1,164 +1,90 @@
-import * as https from 'https';
-import logger from '../utils/logger';
+import { BrowserManager } from './browser-manager';
+import { ScraperOrchestrator } from './orchestrator';
 import { CauseListEntry } from '../types';
+import logger from '../utils/logger';
 
+/**
+ * Main scraper service (facade pattern).
+ * Provides a simple public API while hiding internal complexity.
+ */
 export class ScraperService {
+    private browserManager: BrowserManager;
+    private orchestrator: ScraperOrchestrator;
 
+    constructor() {
+        this.browserManager = BrowserManager.getInstance();
+        this.orchestrator = new ScraperOrchestrator();
+    }
 
-
-
-    async scrapeDailyCauseList(dateStr: string, courtRoom: string = 'COURT NO. 01'): Promise<CauseListEntry[]> {
-        const entries: CauseListEntry[] = [];
+    /**
+     * Scrape the daily cause list for a given date.
+     * @param dateStr Date in YYYY-MM-DD format
+     * @param courtRoom Optional court room to filter by (for Madras)
+     * @param courtId Optional court identifier (madras | delhi)
+     * @returns Array of cause list entries
+     */
+    async scrapeDailyCauseList(dateStr: string, courtRoom: string = 'COURT NO. 01', courtId: string = 'madras'): Promise<CauseListEntry[]> {
+        logger.info(`[ScraperService] Starting scrape for date: ${dateStr}, court: ${courtId}`);
 
         try {
-            const [year, month, day] = dateStr.split('-');
-            const ddmmyyyy = `${day}${month}${year}`;
-
-            const apiUrl = `https://www.mhc.tn.gov.in/judis/clists/clists-madras/api/result.php?file=cause_${ddmmyyyy}.xml`;
-
-            logger.info(`Fetching JSON data from: ${apiUrl} for ${courtRoom}`);
-
-            // Download JSON using fetch (better for serverless)
-            const jsonData = await this.downloadJson(apiUrl);
-
-            if (!jsonData) {
-                logger.warn(`No JSON data received for date ${dateStr}`);
-                return [];
+            // Optimization: Skip browser launch for API-based scrapers (Delhi, Calcutta, Mumbai)
+            // They use Axios/Cheerio and don't need a heavy Playwright context.
+            // This prevents timeouts if the browser fails to launch.
+            let context = null;
+            if (courtId === 'madras') {
+                context = await this.browserManager.createContext();
             }
 
-            logger.info(`JSON received with ${Object.keys(jsonData).length} entries`);
+            try {
+                // Execute scraping using orchestrator
+                // Note: The orchestrator handles the 'madras' flow including navigation. 
+                // Getting ALL entries from orchestrator, then filtering for 'courtRoom' if applicable (for Madras)
+                const entries = await this.orchestrator.scrape(context, dateStr, courtId);
 
-            // Filter for specified courtroom and parse entries
-            const parsedEntries = this.parseJsonData(jsonData, dateStr, courtRoom);
-            entries.push(...parsedEntries);
+                let filteredEntries = entries;
 
-            logger.info(`Successfully parsed ${entries.length} entries for ${courtRoom}`);
+                // Post-process filtering
+                // If a specific court room/side is requested, filter the entries.
+                // For Madras: specific court halls.
+                // For Calcutta: "Appellate Side" vs "Original Side" prefixes.
+                if (courtRoom && courtRoom !== 'ALL COURTS') {
+                    // For Calcutta, if user selects "Appellate Side", we match "Appellate Side - ..."
+                    // For Madras, we match "COURT NO. 1", etc.
 
-        } catch (error) {
-            logger.error('Scraping failed', error);
-        }
-
-        return entries;
-    }
-
-    private async downloadJson(url: string): Promise<any | null> {
-        return new Promise((resolve, reject) => {
-            logger.info(`[FETCH] Requesting: ${url}`);
-            const startTime = Date.now();
-
-            const options = {
-                headers: { 'User-Agent': 'Mozilla/5.0' },
-                rejectUnauthorized: false
-            };
-
-            const req = https.get(url, options, (res) => {
-                let data = '';
-
-                if (res.statusCode === 404) {
-                    logger.warn(`API not found (404): ${url}`);
-                    resolve(null);
-                    return;
+                    filteredEntries = entries.filter(e => {
+                        const room = e.court_hall || '';
+                        return room === courtRoom || room.includes(courtRoom);
+                    });
                 }
 
-                if (res.statusCode && (res.statusCode < 200 || res.statusCode >= 300)) {
-                    logger.error(`HTTP ${res.statusCode} when downloading JSON`);
-                    reject(new Error(`HTTP ${res.statusCode}`));
-                    return;
-                }
-
-                res.on('data', (chunk) => data += chunk);
-
-                res.on('end', () => {
-                    const fetchTime = Date.now() - startTime;
-                    logger.info(`[FETCH] Response received in ${fetchTime}ms, status: ${res.statusCode}`);
-
-                    try {
-                        const json = JSON.parse(data);
-                        resolve(json);
-                    } catch (e: any) {
-                        logger.error(`Failed to parse JSON: ${e.message}`);
-                        reject(e);
-                    }
-                });
-            });
-
-            req.on('error', (e) => {
-                logger.error(`Download error: ${e.message}`);
-                reject(e);
-            });
-        });
-    }
-
-    private parseJsonData(jsonData: any, date: string, courtFilter: string): CauseListEntry[] {
-        const entries: CauseListEntry[] = [];
-
-        const dataArray = Array.isArray(jsonData) ? jsonData : Object.values(jsonData);
-
-        // Relaxed filtering to match suffix (e.g. 'COURT NO. 01' matches 'COURT NO. 01 a')
-        const filteredData = dataArray.filter((item: any) =>
-            item.courtno === courtFilter || item.courtno.startsWith(courtFilter + ' ') || item.courtno.startsWith(courtFilter)
-        );
-
-        if (filteredData.length === 0 && dataArray.length > 0) {
-            const availableCourts = [...new Set(dataArray.map((i: any) => i.courtno))];
-        }
-
-        logger.info(`Filtered ${filteredData.length} entries for ${courtFilter}`);
-
-        filteredData.forEach((item: any) => {
-            const caseNumber = `${item.mcasetype} ${item.mcaseno}/${item.mcaseyr}`.trim();
-
-            const judges = [];
-            if (item.judge1) judges.push(item.judge1);
-            if (item.judge2) judges.push(item.judge2);
-            if (item.judge3) judges.push(item.judge3);
-            if (item.judge4) judges.push(item.judge4);
-            if (item.judge5) judges.push(item.judge5);
-            const judgeName = judges.join(', ');
-
-            entries.push({
-                case_number: caseNumber,
-                case_type: item.mcasetype || 'Unknown',
-                petitioner: item.pname || 'Unknown',
-                respondent: item.rname || 'Unknown',
-                advocates: {
-                    petitioner_counsel: item.mpadv || '',
-                    respondent_counsel: item.mradv || '',
-                },
-                bench_type: item.stagename || 'Unknown',
-                judge_name: judgeName,
-                court_hall: item.courtno || courtFilter,
-                cause_list_date: date,
-                item_number: item.serial_no?.toString() || '',
-                source_type: 'JSON',
-            });
-
-            if (item.extra) {
-                const extraArray = Array.isArray(item.extra) ? item.extra : [item.extra];
-                extraArray.forEach((extra: any) => {
-                    if (extra.excasetype) {
-                        const extraCaseNumber = `${extra.excasetype} ${extra.excaseno}/${extra.excaseyr}`.trim();
-                        entries.push({
-                            case_number: extraCaseNumber,
-                            case_type: extra.excasetype || 'Unknown',
-                            petitioner: extra.expname || 'Unknown',
-                            respondent: extra.exrname || 'Unknown',
-                            advocates: {
-                                petitioner_counsel: extra.expadv || '',
-                                respondent_counsel: extra.exradv || '',
-                            },
-                            bench_type: item.stagename || 'Unknown',
-                            judge_name: judgeName,
-                            court_hall: item.courtno || courtFilter,
-                            cause_list_date: date,
-                            item_number: item.serial_no?.toString() || '',
-                            source_type: 'JSON',
-                        });
-                    }
-                });
+                logger.info(`[ScraperService] Completed scrape with ${filteredEntries.length} entries`);
+                return filteredEntries;
+            } finally {
+                // Always close context after scraping
+                if (context) await context.close();
             }
-        });
+        } catch (error: any) {
+            const fs = require('fs');
+            try { fs.appendFileSync('scraper_debug.log', `[ScraperService] ERROR: ${error.message}\n`); } catch (e) { }
+            logger.error('[ScraperService] Scraping failed:', error);
+            // Return empty array instead of throwing to avoid crashes
+            return [];
+        }
+    }
 
-        return entries;
+    /**
+     * Close the browser instance.
+     * Should be called during graceful shutdown.
+     */
+    async close(): Promise<void> {
+        await this.browserManager.close();
+    }
+
+    /**
+     * Reset the circuit breaker.
+     * Useful for manual recovery after repeated failures.
+     */
+    resetCircuitBreaker(): void {
+        this.orchestrator.resetCircuitBreaker();
     }
 }

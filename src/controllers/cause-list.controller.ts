@@ -22,41 +22,66 @@ export class CauseListController {
     getCauseList = async (req: Request, res: Response) => {
         try {
             const dateStr = req.query.date as string;
-            const courtRoom = req.query.court as string || 'COURT NO. 01';
+            // Legacy 'court' param validation
+            const queryCourt = req.query.court as string;
+            const courtId = (req.query.courtId as string) || (queryCourt?.toLowerCase() === 'delhi' ? 'delhi' : 'madras');
+
+            // For Madras, default to 'COURT NO. 01'. For Delhi, 'court' param might represent something else or be ignored.
+            const courtRoom = (courtId === 'madras' && !queryCourt) ? 'COURT NO. 01' : queryCourt;
 
             if (!dateStr) {
                 return res.status(400).json({ error: 'Date parameter is required (YYYY-MM-DD)' });
             }
 
-            logger.info(`Fetching cause list for ${dateStr}, Court: ${courtRoom}`);
+            const fs = require('fs');
+            try {
+                fs.appendFileSync('scraper_debug.log', `[Controller] Request: date=${dateStr}, courtId=${courtId}, court=${queryCourt}, room=${courtRoom}\n`);
+            } catch (e) { }
 
-            // Check cache
-            const cacheKey = `causelist:${dateStr}:${courtRoom}`;
-            const cachedData = await this.redis.get<CauseListEntry[]>(cacheKey);
+            logger.info(`Fetching cause list for ${dateStr}, CourtId: ${courtId}, CourtRoom: ${courtRoom}`);
+
+            // Check cache (include courtId in key) - v2 to invalidate old empty results
+            const cacheKey = `causelist:${courtId}:${dateStr}:${courtRoom || 'all'}:v2`;
+
+            // DISABLE CACHE FOR DEBUGGING CALCUTTA/MUMBAI
+            let cachedData = null;
+            if (courtId === 'madras' || courtId === 'delhi') {
+                cachedData = await this.redis.get<CauseListEntry[]>(cacheKey);
+            }
+
             if (cachedData) {
-                logger.info(`Cache hit for ${dateStr}:${courtRoom}`);
+                logger.info(`Cache hit for ${cacheKey}`);
+                try { fs.appendFileSync('scraper_debug.log', `[Controller] Cache hit for ${cacheKey}\n`); } catch (e) { }
                 return res.json({
                     source: 'cache',
                     date: dateStr,
                     court: courtRoom,
+                    courtId: courtId,
                     count: cachedData.length,
                     data: cachedData,
                     disclaimer: 'Unofficial API. For informational use only.',
                 });
             }
 
-            logger.info(`Cache miss for ${dateStr}:${courtRoom}, scraping...`);
+            logger.info(`Cache miss for ${cacheKey}, scraping...`);
+            try { fs.appendFileSync('scraper_debug.log', `[Controller] Cache miss, calling scraper...\n`); } catch (e) { }
 
             // Scrape data with court parameter
-            const data = await this.scraper.scrapeDailyCauseList(dateStr, courtRoom);
+            const data = await this.scraper.scrapeDailyCauseList(dateStr, courtRoom, courtId);
+
+            try { fs.appendFileSync('scraper_debug.log', `[Controller] Scraper returned ${data.length} entries\n`); } catch (e) { }
 
             // Cache for 24 hours
-            await this.redis.set(cacheKey, data, 86400);
+            if (data.length > 0) {
+                await this.redis.set(cacheKey, data, 86400);
+            }
 
             res.json({
                 source: 'live',
+                DEBUG_MODE: "ON_VERIFY_FILE_USAGE",
                 date: dateStr,
                 court: courtRoom,
+                courtId: courtId,
                 count: data.length,
                 data,
                 disclaimer: "Unofficial API. For informational use only."

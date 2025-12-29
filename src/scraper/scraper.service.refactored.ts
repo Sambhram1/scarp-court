@@ -21,8 +21,8 @@ export class ScraperService {
      * @param dateStr Date in YYYY-MM-DD format
      * @returns Array of cause list entries
      */
-    async scrapeDailyCauseList(dateStr: string): Promise<CauseListEntry[]> {
-        logger.info(`[ScraperService] Starting scrape for date: ${dateStr}`);
+    async scrapeDailyCauseList(dateStr: string, courtRoom?: string, courtId: string = 'madras'): Promise<CauseListEntry[]> {
+        logger.info(`[ScraperService] Starting scrape for date: ${dateStr}, courtId: ${courtId}`);
 
         try {
             // Get browser context from manager (singleton browser)
@@ -30,7 +30,10 @@ export class ScraperService {
 
             try {
                 // Execute scraping using orchestrator
-                const entries = await this.orchestrator.scrape(context, dateStr);
+                // Note: courtRoom is currently implicit for Madras (handled by strategy defaults/navigation), 
+                // but could be passed if strategies need it for filtering.
+                // For now, we only need to pass strict parameters to orchestrator.scrape.
+                const entries = await this.orchestrator.scrape(context, dateStr, courtId);
                 logger.info(`[ScraperService] Completed scrape with ${entries.length} entries`);
                 return entries;
             } finally {
