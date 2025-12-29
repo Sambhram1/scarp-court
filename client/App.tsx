@@ -31,6 +31,21 @@ function App() {
     const [results, setResults] = useState<Case[]>([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [searchTerm, setSearchTerm] = useState('');
+
+    const filteredResults = results.filter(caseItem => {
+        if (!searchTerm) return true;
+        const lowerTerm = searchTerm.toLowerCase();
+        return (
+            (caseItem.case_number || '').toLowerCase().includes(lowerTerm) ||
+            (caseItem.petitioner || '').toLowerCase().includes(lowerTerm) ||
+            (caseItem.respondent || '').toLowerCase().includes(lowerTerm) ||
+            (caseItem.judge_name || '').toLowerCase().includes(lowerTerm) ||
+            (caseItem.advocates?.petitioner_counsel || '').toLowerCase().includes(lowerTerm) ||
+            (caseItem.advocates?.respondent_counsel || '').toLowerCase().includes(lowerTerm)
+        );
+    });
+
     const [hasSearched, setHasSearched] = useState(false);
 
     const handleSearch = async (e: React.FormEvent) => {
@@ -121,8 +136,6 @@ function App() {
                             </div>
                         )}
 
-                        {/* Calcutta specific dropdown removed to match Delhi style (Unified List) */}
-
                         <div className="form-group">
                             <label htmlFor="date">Date</label>
                             <input
@@ -143,9 +156,25 @@ function App() {
 
             {(hasSearched || results.length > 0) && (
                 <div className={`results-card ${hasSearched ? 'show' : ''}`}>
-                    <div className="results-header">
+                    <div className="results-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
                         <div className="results-count">
-                            {results.length} Case{results.length !== 1 ? 's' : ''} Found - {courtroom}
+                            {filteredResults.length} Result{filteredResults.length !== 1 ? 's' : ''} (of {results.length}) Found - {courtroom}
+                        </div>
+
+                        <div className="filter-group" style={{ flex: '1', minWidth: '200px', maxWidth: '400px' }}>
+                            <input
+                                type="text"
+                                placeholder="Filter by Party Name, Case No, or Judge..."
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                                style={{
+                                    width: '100%',
+                                    padding: '10px',
+                                    borderRadius: '6px',
+                                    border: '1px solid #e0e0e0',
+                                    fontSize: '0.9rem'
+                                }}
+                            />
                         </div>
                     </div>
 
@@ -161,7 +190,7 @@ function App() {
                         </div>
                     )}
 
-                    {!loading && !error && results.length > 0 && (
+                    {!loading && !error && filteredResults.length > 0 && (
                         <div className="table-container">
                             <table>
                                 <thead>
@@ -176,7 +205,7 @@ function App() {
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {results.map((entry, index) => (
+                                    {filteredResults.map((entry, index) => (
                                         <tr key={index}>
                                             <td>{index + 1}</td>
                                             <td className="case-number">{entry.case_number}</td>
@@ -192,9 +221,11 @@ function App() {
                         </div>
                     )}
 
-                    {!loading && !error && hasSearched && results.length === 0 && (
+                    {!loading && !error && hasSearched && filteredResults.length === 0 && (
                         <div className="no-data">
-                            No cases found for the selected date and courtroom.
+                            {results.length > 0
+                                ? `No matches found for "${searchTerm}"`
+                                : 'No cases found for the selected date and courtroom.'}
                         </div>
                     )}
                 </div>
