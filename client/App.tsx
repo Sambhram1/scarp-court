@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { CourtList } from './CourtList';
 
 interface Case {
     case_number: string;
@@ -25,6 +26,7 @@ const COURT_OPTIONS = [
 ];
 
 function App() {
+    const [view, setView] = useState<'search' | 'courts'>('search');
     const [courtId, setCourtId] = useState('madras');
     const [courtroom, setCourtroom] = useState(COURT_OPTIONS[0]);
     const [date, setDate] = useState(() => new Date().toISOString().split('T')[0]);
@@ -55,12 +57,11 @@ function App() {
         setHasSearched(true);
         setResults([]);
 
+        // ... existing implementation
         const url = `/api/cause-list?date=${date}&court=${encodeURIComponent(courtroom)}&courtId=${courtId}&_t=${Date.now()}`;
         console.log(`[Frontend] Fetching: ${url}`);
 
         try {
-            // Include courtId in the request
-            // For Delhi, we pass courtId=delhi. The 'court' param (courtroom) is less relevant but we keep it for API compatibility or logging.
             const response = await fetch(url);
             console.log(`[Frontend] Response Status: ${response.status}`);
 
@@ -86,10 +87,23 @@ function App() {
         }
     };
 
+    if (view === 'courts') {
+        return (
+            <div className="container">
+                <CourtList onBack={() => setView('search')} />
+            </div>
+        );
+    }
+
     return (
         <div className="container">
             <div className="header">
-                <h1>🏛️ {courtId === 'delhi' ? 'Delhi' : (courtId === 'calcutta' ? 'Calcutta' : (courtId === 'mumbai' ? 'Mumbai' : 'Madras'))} High Court</h1>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <h1>🏛️ {courtId === 'delhi' ? 'Delhi' : (courtId === 'calcutta' ? 'Calcutta' : (courtId === 'mumbai' ? 'Mumbai' : 'Madras'))} High Court</h1>
+                    <button onClick={() => setView('courts')} className="btn-secondary" style={{ padding: '8px 12px', fontSize: '0.9rem', cursor: 'pointer' }}>
+                        View Supported Courts
+                    </button>
+                </div>
                 <p>Daily Cause List</p>
             </div>
 
@@ -103,7 +117,6 @@ function App() {
                                 value={courtId}
                                 onChange={(e) => {
                                     setCourtId(e.target.value);
-                                    // Reset courtroom if switching to Delhi, Calcutta, or Mumbai
                                     if (['delhi', 'calcutta', 'mumbai'].includes(e.target.value)) {
                                         setCourtroom('ALL COURTS');
                                     } else {

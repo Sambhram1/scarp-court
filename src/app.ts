@@ -2,10 +2,12 @@ import express from 'express';
 import morgan from 'morgan';
 import path from 'path';
 import { CauseListController } from './controllers/cause-list.controller';
+import { CourtController } from './controllers/court.controller';
 import logger from './utils/logger';
 
 const app = express();
 const controller = new CauseListController();
+const courtController = new CourtController();
 
 // Middleware
 app.use(express.json());
@@ -15,6 +17,7 @@ app.use(morgan('combined', { stream: { write: (message) => logger.http(message.t
 app.use(express.static(path.join(__dirname, '../dist')));
 
 // API Routes
+app.get('/api/courts', courtController.getAllCourts.bind(courtController));
 app.use('/api', controller.getCauseList.bind(controller)); // Changed to use 'controller' as defined
 
 // Handle React routing, return all requests to React app
